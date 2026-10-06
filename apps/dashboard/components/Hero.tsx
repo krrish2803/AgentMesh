@@ -1,9 +1,13 @@
 'use client';
 
 import React from 'react';
-import { Shield, Fingerprint, ArrowRight, Zap, CheckCircle2, Lock, Cpu } from 'lucide-react';
+import Link from 'next/link';
+import { Shield, Fingerprint, ArrowRight, Zap, CheckCircle2, Lock, Cpu, LayoutDashboard, UserPlus } from 'lucide-react';
+import { useAuth } from '@/context/AuthContext';
 
 export function Hero({ onExploreDemo }: { onExploreDemo: () => void }) {
+  const { openAuthModal } = useAuth();
+
   return (
     <section className="relative pt-12 pb-16 overflow-hidden">
       {/* Background glow effects */}
@@ -37,22 +41,32 @@ export function Hero({ onExploreDemo }: { onExploreDemo: () => void }) {
 
         {/* CTAs */}
         <div className="flex flex-wrap items-center justify-center gap-4 pt-2">
+          {/* Create Account Primary Action */}
           <button
-            onClick={onExploreDemo}
+            onClick={() => openAuthModal('signup')}
             className="px-6 py-3.5 rounded-xl bg-gradient-to-r from-monad-600 to-monad-500 hover:from-monad-500 hover:to-monad-400 text-white font-bold text-sm shadow-xl shadow-monad-700/30 flex items-center gap-2 transition-all transform hover:-translate-y-0.5"
           >
-            Launch Interactive Simulation
-            <ArrowRight className="w-4 h-4" />
+            <UserPlus className="w-4 h-4" />
+            Create Account with Face ID
           </button>
+
+          {/* Launch Dashboard Console */}
+          <Link
+            href="/dashboard"
+            className="px-6 py-3.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-100 font-bold text-sm border border-slate-700 flex items-center gap-2 transition-all"
+          >
+            <LayoutDashboard className="w-4 h-4 text-monad-400" />
+            Launch Live Console
+          </Link>
 
           <a
             href="https://testnet.monadscan.com"
             target="_blank"
             rel="noreferrer"
-            className="px-5 py-3.5 rounded-xl bg-slate-900/90 hover:bg-slate-800 text-slate-200 font-semibold text-sm border border-slate-700/80 flex items-center gap-2 transition-colors"
+            className="px-5 py-3.5 rounded-xl bg-slate-950/80 hover:bg-slate-900 text-slate-300 font-semibold text-sm border border-slate-800 flex items-center gap-2 transition-colors"
           >
             <Lock className="w-4 h-4 text-monad-400" />
-            Monad Testnet Contracts (10143)
+            Monad Contracts (10143)
           </a>
         </div>
 

@@ -2,30 +2,32 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { Shield, Fingerprint, RefreshCw, CheckCircle2, UserCheck, ArrowRight, LayoutDashboard } from 'lucide-react';
-import { PasskeyModal } from './PasskeyModal';
+import {
+  Shield,
+  Fingerprint,
+  RefreshCw,
+  CheckCircle2,
+  LayoutDashboard,
+  User,
+  LogOut,
+  ChevronDown,
+  UserPlus,
+  LogIn,
+} from 'lucide-react';
+import { useAuth } from '@/context/AuthContext';
+import { AuthModal } from './AuthModal';
 
 export function Navbar({
   is2D,
   setIs2D,
   onReset,
-  currentAddress,
-  onAddressChange,
 }: {
   is2D?: boolean;
   setIs2D?: (v: boolean) => void;
   onReset?: () => void;
-  currentAddress?: string | null;
-  onAddressChange?: (addr: string) => void;
 }) {
-  const [modalOpen, setModalOpen] = useState(false);
-  const [address, setAddress] = useState<string | null>(currentAddress || '0x8a92D956A3f7b88939c38F6170d4D29bE31bE5C1');
-
-  const handleSuccess = (addr: string) => {
-    setAddress(addr);
-    setModalOpen(false);
-    if (onAddressChange) onAddressChange(addr);
-  };
+  const { user, logout, openAuthModal } = useAuth();
+  const [userDropdown, setUserDropdown] = useState(false);
 
   return (
     <>
@@ -59,7 +61,7 @@ export function Navbar({
             <span className="text-monad-400">ERC-8004 Gated</span>
           </div>
 
-          {/* Right Actions: 2D/3D Mode, Navigation & Passkey Login */}
+          {/* Right Actions: 2D/3D Mode, Console & Auth Buttons */}
           <div className="flex items-center gap-3">
             {/* 2D / 3D Toggle */}
             {setIs2D && (
@@ -80,27 +82,73 @@ export function Navbar({
               <span>Console</span>
             </Link>
 
-            {/* Passkey Login / Connected Badge */}
-            {address ? (
-              <button
-                onClick={() => setModalOpen(true)}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-950/60 border border-emerald-600/60 text-xs hover:border-emerald-500 transition-all"
-                title="Click to switch or re-authenticate"
-              >
-                <Fingerprint className="w-4 h-4 text-emerald-400" />
-                <span className="font-mono text-emerald-300 font-medium">
-                  {address.slice(0, 6)}...{address.slice(-4)}
-                </span>
-                <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-              </button>
+            {/* AUTH STATE: Logged In vs Logged Out */}
+            {user ? (
+              <div className="relative">
+                <button
+                  onClick={() => setUserDropdown(!userDropdown)}
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-950/60 border border-emerald-600/60 text-xs hover:border-emerald-500 transition-all text-slate-200"
+                >
+                  <Fingerprint className="w-4 h-4 text-emerald-400" />
+                  <span className="font-mono text-emerald-300 font-medium">
+                    {user.address.slice(0, 6)}...{user.address.slice(-4)}
+                  </span>
+                  <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                </button>
+
+                {/* User Dropdown */}
+                {userDropdown && (
+                  <div className="absolute right-0 mt-2 w-56 bg-[#0f111e] border border-slate-800 rounded-2xl p-2 shadow-2xl z-50 text-xs space-y-1">
+                    <div className="p-2.5 border-b border-slate-800/80">
+                      <div className="font-bold text-white truncate">{user.name}</div>
+                      <div className="text-[10px] text-slate-400 font-mono truncate mt-0.5">
+                        {user.address}
+                      </div>
+                      <div className="text-[10px] text-emerald-400 mt-1 flex items-center gap-1">
+                        <CheckCircle2 className="w-3 h-3" /> Face ID Bound
+                      </div>
+                    </div>
+
+                    <Link
+                      href="/dashboard"
+                      onClick={() => setUserDropdown(false)}
+                      className="w-full p-2 text-left hover:bg-slate-800/60 rounded-xl text-slate-300 hover:text-white flex items-center gap-2 transition-colors block"
+                    >
+                      <LayoutDashboard className="w-3.5 h-3.5 text-monad-400" />
+                      <span>Open Console</span>
+                    </Link>
+
+                    <button
+                      onClick={() => {
+                        logout();
+                        setUserDropdown(false);
+                      }}
+                      className="w-full p-2 text-left hover:bg-red-950/40 rounded-xl text-red-400 flex items-center gap-2 transition-colors"
+                    >
+                      <LogOut className="w-3.5 h-3.5" />
+                      <span>Sign Out</span>
+                    </button>
+                  </div>
+                )}
+              </div>
             ) : (
-              <button
-                onClick={() => setModalOpen(true)}
-                className="flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-monad-600 hover:bg-monad-500 text-white font-bold text-xs shadow-md shadow-monad-700/30 transition-all"
-              >
-                <Fingerprint className="w-4 h-4" />
-                <span>Login with Face ID</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => openAuthModal('signin')}
+                  className="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-300 hover:text-white hover:bg-slate-800 transition-colors flex items-center gap-1.5"
+                >
+                  <LogIn className="w-3.5 h-3.5" />
+                  <span>Sign In</span>
+                </button>
+
+                <button
+                  onClick={() => openAuthModal('signup')}
+                  className="px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-monad-600 to-monad-500 hover:from-monad-500 hover:to-monad-400 text-white font-bold text-xs shadow-md shadow-monad-700/30 transition-all flex items-center gap-1.5"
+                >
+                  <UserPlus className="w-3.5 h-3.5" />
+                  <span>Create Account</span>
+                </button>
+              </div>
             )}
 
             {/* Trigger Refresh */}
@@ -118,11 +166,7 @@ export function Navbar({
       </header>
 
       {/* Authentication Modal */}
-      <PasskeyModal
-        isOpen={modalOpen}
-        onClose={() => setModalOpen(false)}
-        onSuccess={handleSuccess}
-      />
+      <AuthModal />
     </>
   );
 }
