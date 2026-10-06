@@ -5,7 +5,7 @@ import { MONAD_TESTNET_ADDRESSES } from '@agentmesh/sdk';
 dotenv.config();
 
 export const CONFIG = {
-  PORT: parseInt(process.env.PORT || '8000', 10),
+  PORT: parseInt(process.env.PORT || '8005', 10),
   RPC_URL: process.env.MONAD_RPC_URL || 'https://testnet-rpc.monad.xyz',
   SPEND_GUARD_ADDRESS: (process.env.SPEND_GUARD_ADDRESS || MONAD_TESTNET_ADDRESSES.SPEND_GUARD) as Address,
   USDC_ADDRESS: (process.env.USDC_ADDRESS || MONAD_TESTNET_ADDRESSES.USDC) as Address,

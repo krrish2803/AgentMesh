@@ -107,7 +107,7 @@ export default function DashboardPage() {
   useEffect(() => {
     let ws: WebSocket | null = null;
     try {
-      ws = new WebSocket('ws://localhost:8000/ws/events');
+      ws = new WebSocket('ws://localhost:8005/ws/events');
       ws.onmessage = (msg) => {
         try {
           const ev: FeedEvent = JSON.parse(msg.data);
@@ -161,7 +161,7 @@ export default function DashboardPage() {
   const handleTriggerRogue = async (scenario: string) => {
     triggerShockwaveEffect();
     try {
-      const res = await fetch(`http://localhost:8000/api/rogue/${scenario}`, { method: 'POST' });
+      const res = await fetch(`http://localhost:8005/api/rogue/${scenario}`, { method: 'POST' });
       const data = await res.json();
       setLastFeedback({
         scenario: `Scenario #${scenario}`,
@@ -193,7 +193,7 @@ export default function DashboardPage() {
   const handleTriggerPromptInjection = async () => {
     triggerShockwaveEffect();
     try {
-      const res = await fetch('http://localhost:8000/api/prompt-injection', { method: 'POST' });
+      const res = await fetch('http://localhost:8005/api/prompt-injection', { method: 'POST' });
       const data = await res.json();
       setLastFeedback({
         scenario: 'Prompt Injection Defense',

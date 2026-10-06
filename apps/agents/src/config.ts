@@ -10,7 +10,7 @@ export const CONFIG = {
   SPEND_GUARD_ADDRESS: (process.env.SPEND_GUARD_ADDRESS || MONAD_TESTNET_ADDRESSES.SPEND_GUARD) as Address,
   DATA_SELLER_URL: process.env.DATA_SELLER_URL || 'http://localhost:8101',
   SUMMARIZER_SELLER_URL: process.env.SUMMARIZER_SELLER_URL || 'http://localhost:8102',
-  SERVER_URL: process.env.SERVER_URL || 'http://localhost:8000',
+  SERVER_URL: process.env.SERVER_URL || 'http://localhost:8005',
   OPENAI_API_KEY: process.env.OPENAI_API_KEY || 'mock-key',
   OPENAI_BASE_URL: process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
   OPENAI_MODEL: process.env.OPENAI_MODEL || 'gpt-4o-mini',
