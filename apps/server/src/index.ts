@@ -11,33 +11,86 @@ console.log('--- Starting AgentMesh Telemetry & Coordination Server ---');
 const app = new Hono();
 app.use('*', cors({ origin: '*' }));
 
-// Health
+// 1. Health check
 app.get('/health', (c) => c.json({ status: 'ok', time: new Date().toISOString() }));
 
-// Bootstrap state
+// 2. Dashboard bootstrap snapshot (/api/state)
 app.get('/api/state', (c) => {
   return c.json({
     network: 'Monad Testnet (10143)',
     spendGuard: CONFIG.SPEND_GUARD_ADDRESS,
     usdc: CONFIG.USDC_ADDRESS,
     vaultBalance: '1000.00',
+    currentRun: telemetry.getCurrentRun(),
     agents: telemetry.getAgents(),
     metrics: telemetry.getMetrics(),
     recentEvents: eventHub.getRecentEvents(30),
   });
 });
 
-// Agents
+// 3. Create buyer agent key (/api/agents) - POST
+app.post('/api/agents', async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const role = body.role || 'Autonomous Buyer';
+  const tier = (body.tier as 'A' | 'B' | 'C') || 'A';
+
+  const { agent, privateKey } = telemetry.createAgent(role, tier);
+
+  const event = eventHub.broadcast('agent.created', {
+    address: agent.address,
+    role: agent.role,
+    tier: agent.tier,
+    erc8004Id: agent.erc8004Id,
+    budgetLimit: agent.budgetLimit,
+    timestamp: Date.now(),
+  });
+
+  return c.json({
+    success: true,
+    agent,
+    privateKey, // Exposed on creation for buyer runner setup
+    event,
+  }, 201);
+});
+
+// 4. List agents with budget used (/api/agents) - GET
 app.get('/api/agents', (c) => {
   return c.json({ agents: telemetry.getAgents() });
 });
 
-// Metrics
+// 5. Control a scenario (/api/runs/start and /api/runs/stop)
+app.post('/api/runs/start', async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const scenario = body.scenario || 'normal';
+  const run = telemetry.startRun(scenario);
+
+  const event = eventHub.broadcast('run.started', {
+    runId: run.runId,
+    scenario: run.scenario,
+    startedAt: run.startedAt,
+  });
+
+  return c.json({ status: 'started', run, event });
+});
+
+app.post('/api/runs/stop', async (c) => {
+  const run = telemetry.stopRun();
+
+  const event = eventHub.broadcast('run.stopped', {
+    runId: run.runId,
+    scenario: run.scenario,
+    stoppedAt: run.stoppedAt,
+  });
+
+  return c.json({ status: 'stopped', run, event });
+});
+
+// 6. Metrics (/api/metrics)
 app.get('/api/metrics', (c) => {
   return c.json(telemetry.getMetrics());
 });
 
-// Reputation
+// 7. Reputation registry (/api/reputation)
 app.get('/api/reputation', (c) => {
   return c.json([
     {
@@ -67,7 +120,47 @@ app.get('/api/reputation', (c) => {
   ]);
 });
 
-// Trigger Rogue Revert Scenario live
+// 8. LLM Transcript (/api/transcripts/:agentId)
+app.get('/api/transcripts/:agentId', (c) => {
+  const agentId = c.req.param('agentId');
+  const messages = telemetry.getTranscript(agentId);
+  return c.json({ agentId, messages });
+});
+
+// 9. Replay a recorded run (/api/replay/start)
+app.post('/api/replay/start', async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const speed = body.speed || 1.0;
+
+  // Recorded sequence of canonical demo events
+  const recordedSequence = [
+    { type: 'channel.opened', payload: { channelId: '0xch_replay_01', agent: '0x011CE11111111111111111111111111111111111', payee: '0xDataSeller', deposit: '0.05' } },
+    { type: 'call.paid', payload: { seller: 'DataSeller', priceUSDC: 0.0001, latencyMs: 29 } },
+    { type: 'call.paid', payload: { seller: 'DataSeller', priceUSDC: 0.0001, latencyMs: 34 } },
+    { type: 'call.paid', payload: { seller: 'DataSeller', priceUSDC: 0.0001, latencyMs: 26 } },
+    { type: 'claim.submitted', payload: { channelId: '0xch_replay_01', cumulativeAmount: '0.0003', payee: '0xDataSeller' } },
+    { type: 'claim.confirmed', payload: { channelId: '0xch_replay_01', txHash: '0x9923847291a...712', block: 1829304 } },
+    { type: 'rejection', payload: { scenarioId: '1', error: 'OverChannelCap', humanMessage: 'Replay: $500 exceeds $10 cap' } },
+  ];
+
+  // Schedule broadcast of recorded events
+  let delay = 0;
+  for (const item of recordedSequence) {
+    setTimeout(() => {
+      eventHub.broadcast(item.type, { ...item.payload, replay: true }, 'replay-run');
+    }, delay);
+    delay += Math.floor(1000 / speed);
+  }
+
+  return c.json({
+    status: 'replaying',
+    eventCount: recordedSequence.length,
+    speed,
+    estimatedDurationMs: delay,
+  });
+});
+
+// 10. Trigger Rogue Revert Scenario live (/api/rogue/:scenario)
 app.post('/api/rogue/:scenario', (c) => {
   const scenario = c.req.param('scenario');
   const scenariosMap: Record<string, { error: string; message: string; shockwaveLevel: number }> = {
@@ -129,7 +222,7 @@ app.post('/api/rogue/:scenario', (c) => {
   });
 });
 
-// Trigger Prompt-Injection Attack Test
+// 11. Trigger Prompt-Injection Attack Test (/api/prompt-injection)
 app.post('/api/prompt-injection', (c) => {
   telemetry.recordRejection();
   const event = eventHub.broadcast('rejection', {
@@ -149,7 +242,7 @@ app.post('/api/prompt-injection', (c) => {
   });
 });
 
-// Record or simulate paid call for demo stream
+// 12. Simulate paid call for live stream demo (/api/simulate-call)
 app.post('/api/simulate-call', async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const seller = body.seller || 'DataSeller';
@@ -170,7 +263,7 @@ app.post('/api/simulate-call', async (c) => {
   return c.json({ status: 'ok', event, metrics: telemetry.getMetrics() });
 });
 
-// Recent events
+// 13. Recent events feed (/api/events)
 app.get('/api/events', (c) => {
   return c.json({ events: eventHub.getRecentEvents(100) });
 });
