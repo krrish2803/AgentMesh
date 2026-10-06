@@ -1,0 +1,15 @@
+[profile.default]
+src = "src"
+out = "out"
+libs = ["lib"]
+solc_version = "0.8.24"
+evm_version = "cancun"
+optimizer = true
+optimizer_runs = 200
+
+# See Monad specific RPC / network settings
+[rpc_endpoints]
+monad_testnet = "https://testnet-rpc.monad.xyz"
+
+[etherscan]
+monad_testnet = { key = "not-needed", url = "https://testnet.monadscan.com/api" }

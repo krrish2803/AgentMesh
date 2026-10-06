@@ -1,0 +1,19 @@
+{
+  "name": "agentmesh-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.0.0",
+  "scripts": {
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "contracts:build": "cd contracts && forge build",
+    "contracts:test": "cd contracts && forge test -vvv",
+    "server:dev": "pnpm --filter @agentmesh/server dev",
+    "sellers:dev": "pnpm --filter @agentmesh/sellers dev",
+    "agents:run": "pnpm --filter @agentmesh/agents start",
+    "dashboard:dev": "pnpm --filter @agentmesh/dashboard dev"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3"
+  }
+}
