@@ -95,19 +95,36 @@ export function createDataSellerApp() {
       const tEnd = Date.now();
       const latencyMs = tEnd - tStart;
 
-      // Simulated market sentiment data per PRD requirement
       const sampleTickers = ['BTC', 'ETH', 'MON', 'SOL', 'NVDA'];
       const ticker = sampleTickers[Math.floor(Math.random() * sampleTickers.length)];
       const sentimentScore = +(Math.random() * 2 - 1).toFixed(3); // -1.0 to 1.0
+      const clientAddress = verification.channel?.agent || '0x011CE11111111111111111111111111111111111';
+
+      const feedbackAuth = {
+        payee: DATA_SELLER_ACCOUNT.address,
+        payeeAgentId: Number(PAYEE_AGENT_ID),
+        channelId,
+        cumulativeAmount: String(cumulativeAmount),
+        client: clientAddress,
+        nonce: Date.now(),
+        sig: await DATA_SELLER_ACCOUNT.signMessage({
+          message: `ERC8004_FEEDBACK_AUTH:${PAYEE_AGENT_ID}:${channelId}:${cumulativeAmount}:${clientAddress}`,
+        }),
+      };
+
+      const result = {
+        ticker,
+        sentiment: sentimentScore > 0.1 ? 'bullish' : sentimentScore < -0.1 ? 'bearish' : 'neutral',
+        score: sentimentScore,
+        timestamp: new Date().toISOString(),
+        isSimulated: true,
+      };
 
       return c.json(
         {
           status: 'success',
-          ticker,
-          sentiment: sentimentScore > 0.1 ? 'bullish' : sentimentScore < -0.1 ? 'bearish' : 'neutral',
-          score: sentimentScore,
-          timestamp: new Date().toISOString(),
-          isSimulated: true,
+          result,
+          feedbackAuth,
           verificationLatencyMs: latencyMs,
           cumulativePaid: String(cumulativeAmount),
         },

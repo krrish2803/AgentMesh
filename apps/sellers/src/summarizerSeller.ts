@@ -126,11 +126,31 @@ export function createSummarizerSellerApp() {
 
       const tEnd = Date.now();
       const latencyMs = tEnd - tStart;
+      const clientAddress = verification.channel?.agent || '0x011CE11111111111111111111111111111111111';
+
+      const feedbackAuth = {
+        payee: SUMMARIZER_SELLER_ACCOUNT.address,
+        payeeAgentId: Number(PAYEE_AGENT_ID),
+        channelId,
+        cumulativeAmount: String(cumulativeAmount),
+        client: clientAddress,
+        nonce: Date.now(),
+        sig: await SUMMARIZER_SELLER_ACCOUNT.signMessage({
+          message: `ERC8004_FEEDBACK_AUTH:${PAYEE_AGENT_ID}:${channelId}:${cumulativeAmount}:${clientAddress}`,
+        }),
+      };
+
+      const result = {
+        summary,
+        charCount: inputText.length,
+      };
 
       return c.json(
         {
           status: 'success',
+          result,
           summary,
+          feedbackAuth,
           charCount: inputText.length,
           verificationLatencyMs: latencyMs,
           cumulativePaid: String(cumulativeAmount),
