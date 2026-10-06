@@ -1,15 +1,21 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import { Navbar } from '@/components/Navbar';
+import { Hero } from '@/components/Hero';
+import { ProblemSolution } from '@/components/ProblemSolution';
+import { HowItWorks } from '@/components/HowItWorks';
+import { FeaturesComparison } from '@/components/FeaturesComparison';
+import { FAQ } from '@/components/FAQ';
+import { Footer } from '@/components/Footer';
 import { VaultCard } from '@/components/VaultCard';
 import { MetricsPanel } from '@/components/MetricsPanel';
 import { RoguePanel, type RogueRevertFeedback } from '@/components/RoguePanel';
 import { LiveFeed, type FeedEvent } from '@/components/LiveFeed';
 import { AgentsList, type AgentItem } from '@/components/AgentsList';
 import { ReputationTable, type SellerReputation } from '@/components/ReputationTable';
-import { Play, Sparkles } from 'lucide-react';
+import { Play, Sparkles, Terminal } from 'lucide-react';
 
 // Dynamic import for R3F 3D Canvas with ssr: false
 const TheMeshCanvas = dynamic(() => import('@/scene/TheMeshCanvas'), {
@@ -22,6 +28,8 @@ const TheMeshCanvas = dynamic(() => import('@/scene/TheMeshCanvas'), {
 });
 
 export default function DashboardPage() {
+  const consoleRef = useRef<HTMLDivElement>(null);
+
   const [is2D, setIs2D] = useState(false);
   const [shockwave, setShockwave] = useState(false);
   const [vaultBalance, setVaultBalance] = useState(1000.0);
@@ -121,6 +129,10 @@ export default function DashboardPage() {
     setTimeout(() => setShockwave(false), 2000);
   };
 
+  const handleScrollToConsole = () => {
+    consoleRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
   const handleFundVault = (amount: number) => {
     setVaultBalance((b) => b + amount);
     const newEvent: FeedEvent = {
@@ -159,7 +171,6 @@ export default function DashboardPage() {
       });
       setMetrics((m) => ({ ...m, rejectedCount: m.rejectedCount + 1 }));
     } catch {
-      // Fallback local simulation
       const fallbackMap: Record<string, string> = {
         '1': 'OverChannelCap: Request exceeds per-channel cap of $10.00',
         '2': 'WindowBudgetExceeded: Rolling window budget exceeded',
@@ -234,66 +245,92 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#090a0f] text-slate-100 flex flex-col">
+    <div className="min-h-screen bg-[#090a0f] text-slate-100 flex flex-col font-sans">
       <Navbar is2D={is2D} setIs2D={setIs2D} onReset={() => window.location.reload()} />
 
-      <main className="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 space-y-6">
-        {/* Top Section: 3D The Mesh Canvas + Controls */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Left 2 Cols: 3D Visualization */}
-          <div className="lg:col-span-2 h-[420px] rounded-2xl overflow-hidden shadow-2xl relative">
-            <TheMeshCanvas shockwave={shockwave} is2D={is2D} />
+      {/* 1. Hero Section with USP & Primary CTAs */}
+      <Hero onExploreDemo={handleScrollToConsole} />
 
-            {/* Quick Burst Demo Button */}
-            <div className="absolute top-3 right-3 z-10">
+      {/* 2. Problem Statement & Proposed Solution */}
+      <ProblemSolution />
+
+      {/* 3. How It Works Step-by-Step Flow */}
+      <HowItWorks />
+
+      {/* 4. Live Interactive Simulation Console & 3D Three.js Mesh */}
+      <section ref={consoleRef} className="py-12 border-t border-slate-800/80 bg-[#07080e]">
+        <div className="max-w-7xl mx-auto px-4 space-y-8">
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+            <div>
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-monad-950 text-monad-400 font-mono text-xs border border-monad-800/60 mb-2">
+                <Terminal className="w-3.5 h-3.5" /> Live Interactive Environment
+              </div>
+              <h2 className="text-3xl font-extrabold text-white tracking-tight">
+                Live Agent Economy & Safety Console
+              </h2>
+              <p className="text-slate-400 text-sm mt-1">
+                Interact with the 3D state-channel mesh, trigger rogue agent attacks, and watch deterministic on-chain reverts live.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-3">
               <button
                 onClick={handleSimulateBurstCalls}
                 disabled={simulating}
-                className="px-3 py-1.5 rounded-lg bg-monad-600/90 hover:bg-monad-500 text-white text-xs font-bold flex items-center gap-1.5 backdrop-blur transition-all shadow-lg shadow-monad-700/40"
+                className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-monad-600 to-monad-500 hover:from-monad-500 hover:to-monad-400 text-white text-xs font-bold flex items-center gap-2 shadow-lg shadow-monad-700/30 transition-all"
               >
                 <Play className="w-3.5 h-3.5" />
-                {simulating ? 'Firing Vouchers...' : 'Fire 5 Micropayments'}
+                {simulating ? 'Streaming Vouchers...' : 'Fire 5 Micropayments'}
               </button>
             </div>
           </div>
 
-          {/* Right Col: SpendGuard Vault Envelope Card */}
-          <div className="flex flex-col gap-6">
-            <VaultCard balance={vaultBalance} onFund={handleFundVault} />
+          {/* 3D Canvas + SpendGuard Vault Card */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2 h-[440px] rounded-2xl overflow-hidden shadow-2xl relative">
+              <TheMeshCanvas shockwave={shockwave} is2D={is2D} />
+            </div>
+            <div className="flex flex-col gap-6">
+              <VaultCard balance={vaultBalance} onFund={handleFundVault} />
+            </div>
+          </div>
+
+          {/* Performance & Safety HUD */}
+          <MetricsPanel
+            totalCalls={metrics.totalCalls}
+            onChainTxCount={metrics.onChainTxCount}
+            p50LatencyMs={metrics.p50LatencyMs}
+            p95LatencyMs={metrics.p95LatencyMs}
+            rejectedCount={metrics.rejectedCount}
+            totalVolume={metrics.totalVolumeUSDC}
+          />
+
+          {/* Lower Grid: Rogue Agent Panel + Live Feed */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <RoguePanel
+              onTriggerRogue={handleTriggerRogue}
+              onTriggerPromptInjection={handleTriggerPromptInjection}
+              lastFeedback={lastFeedback}
+            />
+            <LiveFeed events={events} />
+          </div>
+
+          {/* Swarm & Reputation Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <AgentsList agents={agents} onRevoke={handleRevokeAgent} />
+            <ReputationTable sellers={sellers} />
           </div>
         </div>
+      </section>
 
-        {/* Middle Section: Metrics HUD */}
-        <MetricsPanel
-          totalCalls={metrics.totalCalls}
-          onChainTxCount={metrics.onChainTxCount}
-          p50LatencyMs={metrics.p50LatencyMs}
-          p95LatencyMs={metrics.p95LatencyMs}
-          rejectedCount={metrics.rejectedCount}
-          totalVolume={metrics.totalVolumeUSDC}
-        />
+      {/* 5. Features & Honest x402 Comparison */}
+      <FeaturesComparison />
 
-        {/* Lower Grid: Rogue Agent Panel + Live Feed */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <RoguePanel
-            onTriggerRogue={handleTriggerRogue}
-            onTriggerPromptInjection={handleTriggerPromptInjection}
-            lastFeedback={lastFeedback}
-          />
-          <LiveFeed events={events} />
-        </div>
+      {/* 6. Frequently Asked Questions */}
+      <FAQ />
 
-        {/* Bottom Grid: Active Buyer Swarm + ERC-8004 Reputation */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <AgentsList agents={agents} onRevoke={handleRevokeAgent} />
-          <ReputationTable sellers={sellers} />
-        </div>
-      </main>
-
-      {/* Footer */}
-      <footer className="border-t border-monad-900/40 py-4 text-center text-xs text-slate-500 font-mono">
-        AgentMesh SpendGuard • Monad Metropolis Track 04 • Passkey Envelope & Payment Channels
-      </footer>
+      {/* 7. Footer */}
+      <Footer />
     </div>
   );
 }
