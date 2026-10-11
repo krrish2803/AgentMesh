@@ -1,0 +1,10 @@
+[build]
+  command = "pnpm install --frozen-lockfile && pnpm --filter @agentmesh/sdk build && pnpm --filter @agentmesh/dashboard build"
+  publish = "apps/dashboard/.next"
+
+[build.environment]
+  NODE_VERSION = "22"
+  NEXT_PUBLIC_API_URL = "https://agentmesh-o700.onrender.com"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
