@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Check, X, Shield, Zap, Sparkles } from 'lucide-react';
+import { Check, X, Shield } from 'lucide-react';
 
 export function FeaturesComparison() {
   const comparison = [

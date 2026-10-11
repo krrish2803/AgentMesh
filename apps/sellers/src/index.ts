@@ -6,7 +6,7 @@ import { createSummarizerSellerApp } from './summarizerSeller.js';
 console.log('--- Starting AgentMesh Seller Microservices ---');
 
 // Start DataSeller on port 8101
-const { app: dataApp } = createDataSellerApp();
+const { app: dataApp, batcher: dataBatcher } = createDataSellerApp();
 serve(
   {
     fetch: dataApp.fetch,
@@ -18,7 +18,7 @@ serve(
 );
 
 // Start SummarizerSeller on port 8102
-const { app: summarizerApp } = createSummarizerSellerApp();
+const { app: summarizerApp, batcher: summarizerBatcher } = createSummarizerSellerApp();
 serve(
   {
     fetch: summarizerApp.fetch,
@@ -28,3 +28,16 @@ serve(
     console.log(`[SummarizerSeller] Running on http://localhost:${info.port} (AI summarizer @ $0.001)`);
   }
 );
+
+async function shutdown(signal: string) {
+  console.log(`[Seller] Received ${signal}, settling channels and shutting down...`);
+  try {
+    await Promise.all([dataBatcher?.settleAndClose(), summarizerBatcher?.settleAndClose()]);
+  } catch (err: any) {
+    console.error(`[Seller] Error during settlement:`, err?.message || err);
+  }
+  process.exit(0);
+}
+
+process.on('SIGINT', () => void shutdown('SIGINT'));
+process.on('SIGTERM', () => void shutdown('SIGTERM'));

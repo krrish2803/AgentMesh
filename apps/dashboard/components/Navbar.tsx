@@ -8,7 +8,6 @@ import {
   RefreshCw,
   CheckCircle2,
   LayoutDashboard,
-  User,
   LogOut,
   ChevronDown,
   UserPlus,

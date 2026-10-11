@@ -19,4 +19,6 @@ interface IERC8004Reputation {
         string calldata tag1,
         string calldata tag2
     ) external view returns (uint64 count, int128 summaryValue, uint8 decimals);
+
+    function getClients(uint256 agentId) external view returns (address[] memory);
 }

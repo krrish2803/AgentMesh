@@ -10,7 +10,6 @@
   },
   "dependencies": {
     "@agentmesh/sdk": "workspace:*",
-    "@hono/node-server": "^1.13.8",
     "dotenv": "^16.4.7",
     "hono": "^4.7.2",
     "mongodb": "^6.13.0",

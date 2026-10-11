@@ -52,6 +52,7 @@ contract SpendGuard is EIP712, ReentrancyGuard {
     // --- State ---
 
     address public owner;
+    address public pendingOwner;
     IERC20 public immutable usdc;
     IERC8004Identity public identityRegistry;
     IERC8004Reputation public reputationRegistry;
@@ -86,6 +87,12 @@ contract SpendGuard is EIP712, ReentrancyGuard {
     error InsufficientVaultBalance(uint256 requested, uint256 available);
     error InvalidCumulativeAmount(uint256 provided, uint256 currentClaimed);
     error ChannelNotExpirableYet(bytes32 channelId, uint256 expiry, uint256 currentTime);
+    error OnlyPendingOwner();
+    error InvalidChannelExpiry(uint256 provided, uint256 currentTime);
+    error InvalidPolicyWindow(uint256 windowSecs);
+    error InvalidPolicyBudget(uint256 budgetPerWindow);
+    error InvalidPolicyExpiry(uint256 provided, uint256 currentTime);
+    error ZeroAmount();
 
     // --- Events ---
 
@@ -111,6 +118,8 @@ contract SpendGuard is EIP712, ReentrancyGuard {
     );
     event Claimed(bytes32 indexed channelId, address indexed payee, uint256 cumulativeAmount, uint256 delta);
     event ChannelClosed(bytes32 indexed channelId, uint256 claimed, uint256 refunded);
+    event OwnershipTransferStarted(address indexed previousOwner, address indexed newOwner);
+    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
 
     // --- Modifiers ---
 
@@ -125,28 +134,56 @@ contract SpendGuard is EIP712, ReentrancyGuard {
         address _reputationRegistry
     ) EIP712("SpendGuard", "1") {
         if (_usdc == address(0)) revert ZeroAddress();
+        if (_identityRegistry == address(0) || _reputationRegistry == address(0)) revert ZeroAddress();
         owner = msg.sender;
         usdc = IERC20(_usdc);
         identityRegistry = IERC8004Identity(_identityRegistry);
         reputationRegistry = IERC8004Reputation(_reputationRegistry);
+        emit OwnershipTransferred(address(0), msg.sender);
     }
 
     // --- Owner Vault Management ---
 
+    /// @notice Starts a two-step ownership transfer. New owner must call acceptOwnership().
     function transferOwnership(address newOwner) external onlyOwner {
         if (newOwner == address(0)) revert ZeroAddress();
-        owner = newOwner;
+        pendingOwner = newOwner;
+        emit OwnershipTransferStarted(owner, newOwner);
+    }
+
+    /// @notice Completes the ownership transfer initiated by transferOwnership().
+    function acceptOwnership() external {
+        if (msg.sender != pendingOwner) revert OnlyPendingOwner();
+        address previous = owner;
+        owner = msg.sender;
+        pendingOwner = address(0);
+        emit OwnershipTransferred(previous, msg.sender);
     }
 
     function setRegistries(address _identityRegistry, address _reputationRegistry) external onlyOwner {
+        if (_identityRegistry == address(0) || _reputationRegistry == address(0)) revert ZeroAddress();
         identityRegistry = IERC8004Identity(_identityRegistry);
         reputationRegistry = IERC8004Reputation(_reputationRegistry);
     }
 
     function fund(uint256 amount) external nonReentrant {
+        if (amount == 0) revert ZeroAmount();
+        uint256 balanceBefore = usdc.balanceOf(address(this));
         usdc.safeTransferFrom(msg.sender, address(this), amount);
-        vaultBalance += amount;
-        emit VaultFunded(msg.sender, amount, vaultBalance);
+        // Credit actual received amount (defends against fee-on-transfer tokens)
+        uint256 received = usdc.balanceOf(address(this)) - balanceBefore;
+        vaultBalance += received;
+        emit VaultFunded(msg.sender, received, vaultBalance);
+    }
+
+    /// @notice Credits any tokens sent directly to the contract (not via fund) into the vault accounting.
+    function syncVault() external onlyOwner {
+        uint256 balance = usdc.balanceOf(address(this));
+        if (balance > vaultBalance) {
+            uint256 stray = balance - vaultBalance;
+            vaultBalance = balance;
+            emit VaultFunded(msg.sender, stray, vaultBalance);
+        }
     }
 
     function withdraw(uint256 amount) external nonReentrant onlyOwner {
@@ -166,6 +203,9 @@ contract SpendGuard is EIP712, ReentrancyGuard {
         bool requireRegisteredPayee
     ) external onlyOwner {
         if (agent == address(0)) revert ZeroAddress();
+        if (windowSecs == 0) revert InvalidPolicyWindow(windowSecs);
+        if (budgetPerWindow == 0) revert InvalidPolicyBudget(budgetPerWindow);
+        if (expiry <= block.timestamp) revert InvalidPolicyExpiry(expiry, block.timestamp);
 
         policies[agent] = Policy({
             maxPerChannel: maxPerChannel,
@@ -177,11 +217,10 @@ contract SpendGuard is EIP712, ReentrancyGuard {
             active: true
         });
 
-        // Initialize window start if not set
-        if (windowTrackers[agent].windowStart == 0) {
-            windowTrackers[agent].windowStart = block.timestamp;
-            windowTrackers[agent].windowSpent = 0;
-        }
+        // Always reset the rolling window when a policy is (re)placed so spend
+        // from a previous policy/window never leaks into the new budget.
+        windowTrackers[agent].windowStart = block.timestamp;
+        windowTrackers[agent].windowSpent = 0;
 
         emit PolicySet(
             agent,
@@ -210,6 +249,11 @@ contract SpendGuard is EIP712, ReentrancyGuard {
         address agent = msg.sender;
         Policy memory policy = policies[agent];
 
+        // Input validation
+        if (payee == address(0)) revert ZeroAddress();
+        if (deposit == 0) revert ZeroAmount();
+        if (channelExpiry <= block.timestamp) revert InvalidChannelExpiry(channelExpiry, block.timestamp);
+
         if (!policy.active) revert AgentRevoked(agent);
         if (block.timestamp > policy.expiry) revert PolicyExpired(agent, policy.expiry);
         if (deposit > policy.maxPerChannel) revert OverChannelCap(deposit, policy.maxPerChannel);
@@ -226,29 +270,20 @@ contract SpendGuard is EIP712, ReentrancyGuard {
             revert WindowBudgetExceeded(deposit, tracker.windowSpent, policy.budgetPerWindow);
         }
 
-        // ERC-8004 Payee Registration Check
-        if (policy.requireRegisteredPayee && address(identityRegistry) != address(0)) {
-            if (payeeAgentId == 0) revert PayeeNotRegistered(payee, payeeAgentId);
-            try identityRegistry.ownerOf(payeeAgentId) returns (address regOwner) {
-                if (regOwner == address(0)) revert PayeeNotRegistered(payee, payeeAgentId);
-            } catch {
+        // ERC-8004 Payee Registration Check — the payee address must actually be
+        // bound to payeeAgentId (owner or agent wallet), otherwise a caller could
+        // cite any third party's registered/high-reputation agentId.
+        if (policy.requireRegisteredPayee || policy.minPayeeRep > 0) {
+            if (!_isBoundPayee(payee, payeeAgentId)) {
                 revert PayeeNotRegistered(payee, payeeAgentId);
             }
         }
 
-        // ERC-8004 Payee Reputation Check
-        if (policy.minPayeeRep > 0 && address(reputationRegistry) != address(0)) {
-            try reputationRegistry.getSummary(payeeAgentId, new address[](0), "", "") returns (
-                uint64,
-                int128 summaryValue,
-                uint8
-            ) {
-                if (summaryValue < policy.minPayeeRep) {
-                    revert PayeeReputationTooLow(payeeAgentId, summaryValue, policy.minPayeeRep);
-                }
-            } catch {
-                // If reputation query fails or reverts
-                revert PayeeReputationTooLow(payeeAgentId, 0, policy.minPayeeRep);
+        // ERC-8004 Payee Reputation Check (normalized for registry decimals)
+        if (policy.minPayeeRep > 0) {
+            (bool repOk, int128 actualRep) = _reputationOf(payeeAgentId);
+            if (!repOk || actualRep < policy.minPayeeRep) {
+                revert PayeeReputationTooLow(payeeAgentId, repOk ? actualRep : int128(0), policy.minPayeeRep);
             }
         }
 
@@ -295,12 +330,12 @@ contract SpendGuard is EIP712, ReentrancyGuard {
             revert VoucherExceedsDeposit(cumulativeAmount, channel.deposit);
         }
 
-        // Verify EIP-712 Voucher Signature
+        // Verify EIP-712 Voucher Signature (tryRecover never reverts on malformed sigs,
+        // so InvalidVoucher is always reachable for bad signers / garbage signatures)
         bytes32 structHash = keccak256(abi.encode(VOUCHER_TYPEHASH, channelId, cumulativeAmount));
         bytes32 digest = _hashTypedDataV4(structHash);
-        address recovered = ECDSA.recover(digest, sig);
-
-        if (recovered != channel.agent) {
+        (address recovered, ECDSA.RecoverError err,) = ECDSA.tryRecover(digest, sig);
+        if (err != ECDSA.RecoverError.NoError || recovered != channel.agent) {
             revert InvalidVoucher(channelId, recovered, channel.agent);
         }
 
@@ -323,11 +358,11 @@ contract SpendGuard is EIP712, ReentrancyGuard {
         Channel storage channel = channels[channelId];
         if (channel.closed) revert ChannelNotOpen(channelId);
 
-        // Only agent, payee, or anyone after expiry can close
-        if (msg.sender != channel.agent && msg.sender != channel.payee) {
-            if (block.timestamp <= channel.expiry) {
-                revert ChannelNotExpirableYet(channelId, channel.expiry, block.timestamp);
-            }
+        // The payee (seller) may settle and release a channel at any time. The
+        // agent (buyer) and any third party may only close once the channel has
+        // expired, so a buyer can never cut off an in-flight seller claim.
+        if (msg.sender != channel.payee && block.timestamp <= channel.expiry) {
+            revert ChannelNotExpirableYet(channelId, channel.expiry, block.timestamp);
         }
 
         channel.closed = true;
@@ -344,14 +379,70 @@ contract SpendGuard is EIP712, ReentrancyGuard {
         return _domainSeparatorV4();
     }
 
+    // --- Internal Gating Helpers ---
+
+    /// @dev Returns true iff `payee` is the registered owner of `payeeAgentId`,
+    ///      or the registry's agent wallet for that id. Reverts/zero/absent ids fail closed.
+    function _isBoundPayee(address payee, uint256 payeeAgentId) internal view returns (bool) {
+        if (payee == address(0) || payeeAgentId == 0) return false;
+        address registered;
+        try identityRegistry.ownerOf(payeeAgentId) returns (address owner_) {
+            registered = owner_;
+        } catch {
+            return false;
+        }
+        if (registered == address(0)) return false;
+        if (registered == payee) return true;
+        try identityRegistry.getAgentWallet(payeeAgentId) returns (address wallet) {
+            return wallet != address(0) && wallet == payee;
+        } catch {
+            return false;
+        }
+    }
+
+    /// @dev Normalizes a registry summary to policy units: divides out `repDecimals`.
+    ///      Returns 0 when there is no feedback or the registry reports unusable decimals (fail closed).
+    function _normalizedRep(
+        uint64 count,
+        int128 summaryValue,
+        uint8 repDecimals
+    ) internal pure returns (int128) {
+        if (count == 0) return 0;
+        if (repDecimals > 18) return 0;
+        if (repDecimals == 0) return summaryValue;
+        return int128(int256(summaryValue) / int256(uint256(10) ** repDecimals));
+    }
+
+    // ERC-8004 registries require a non-empty client list for getSummary, so
+    // resolve the feedback-givers first. Any failure fails closed.
+    function _reputationOf(uint256 payeeAgentId) internal view returns (bool ok, int128 rep) {
+        try reputationRegistry.getClients(payeeAgentId) returns (address[] memory clients) {
+            if (clients.length == 0) return (false, 0);
+            try reputationRegistry.getSummary(payeeAgentId, clients, "", "") returns (
+                uint64 count,
+                int128 summaryValue,
+                uint8 repDecimals
+            ) {
+                return (true, _normalizedRep(count, summaryValue, repDecimals));
+            } catch {
+                return (false, 0);
+            }
+        } catch {
+            return (false, 0);
+        }
+    }
+
     // --- Simulation View Function for Client/Server Rejection Pre-checks ---
 
     function checkOpenChannel(
         address agent,
-        address /* payee */,
+        address payee,
         uint256 payeeAgentId,
         uint256 deposit
     ) external view returns (bool ok, string memory reason) {
+        if (payee == address(0)) return (false, "ZeroAddress");
+        if (deposit == 0) return (false, "ZeroAmount");
+
         Policy memory policy = policies[agent];
         if (!policy.active) return (false, "AgentRevoked");
         if (block.timestamp > policy.expiry) return (false, "PolicyExpired");
@@ -367,25 +458,13 @@ contract SpendGuard is EIP712, ReentrancyGuard {
             return (false, "WindowBudgetExceeded");
         }
 
-        if (policy.requireRegisteredPayee && address(identityRegistry) != address(0)) {
-            if (payeeAgentId == 0) return (false, "PayeeNotRegistered");
-            try identityRegistry.ownerOf(payeeAgentId) returns (address regOwner) {
-                if (regOwner == address(0)) return (false, "PayeeNotRegistered");
-            } catch {
-                return (false, "PayeeNotRegistered");
-            }
+        if (policy.requireRegisteredPayee || policy.minPayeeRep > 0) {
+            if (!_isBoundPayee(payee, payeeAgentId)) return (false, "PayeeNotRegistered");
         }
 
-        if (policy.minPayeeRep > 0 && address(reputationRegistry) != address(0)) {
-            try reputationRegistry.getSummary(payeeAgentId, new address[](0), "", "") returns (
-                uint64,
-                int128 summaryValue,
-                uint8
-            ) {
-                if (summaryValue < policy.minPayeeRep) {
-                    return (false, "PayeeReputationTooLow");
-                }
-            } catch {
+        if (policy.minPayeeRep > 0) {
+            (bool repOk, int128 actualRep) = _reputationOf(payeeAgentId);
+            if (!repOk || actualRep < policy.minPayeeRep) {
                 return (false, "PayeeReputationTooLow");
             }
         }

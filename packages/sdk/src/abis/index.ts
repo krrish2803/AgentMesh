@@ -1,6 +1,7 @@
-import SpendGuardAbi from './SpendGuard.json';
-import IdentityRegistryAbi from './IdentityRegistry.json';
-import ReputationRegistryAbi from './ReputationRegistry.json';
+import type { Abi } from 'viem';
+import SpendGuardAbiJson from './SpendGuard.json';
+import IdentityRegistryAbiJson from './IdentityRegistry.json';
+import ReputationRegistryAbiJson from './ReputationRegistry.json';
 
 export const erc20Abi = [
   {
@@ -39,4 +40,7 @@ export const erc20Abi = [
   },
 ] as const;
 
-export { SpendGuardAbi, IdentityRegistryAbi, ReputationRegistryAbi };
+export const SpendGuardAbi = SpendGuardAbiJson as Abi;
+export const IdentityRegistryAbi = IdentityRegistryAbiJson as Abi;
+export const ReputationRegistryAbi = ReputationRegistryAbiJson as Abi;
+export { SpendGuardAbiJson, IdentityRegistryAbiJson, ReputationRegistryAbiJson };

@@ -1,6 +1,6 @@
 'use client';
 
-import { Shield, ExternalLink, Code2, Terminal } from 'lucide-react';
+import { Shield, ExternalLink } from 'lucide-react';
 
 export function Footer() {
   return (

@@ -5,6 +5,7 @@ import OpenAI from 'openai';
 import { CONFIG, SUMMARIZER_SELLER_ACCOUNT } from './config.js';
 import { VoucherVerifier } from './verify.js';
 import { ClaimBatcher } from './batcher.js';
+import { reportUsage } from './usage.js';
 
 export function createSummarizerSellerApp() {
   const app = new Hono();
@@ -24,7 +25,7 @@ export function createSummarizerSellerApp() {
   });
 
   const PRICE_PER_CALL = 1_000n; // $0.001 USDC (6 decimals)
-  const PAYEE_AGENT_ID = 102n;
+  const PAYEE_AGENT_ID = CONFIG.SUMMARIZER_SELLER_AGENT_ID;
 
   // Agent Card metadata
   app.get('/card', (c) => {
@@ -68,21 +69,40 @@ export function createSummarizerSellerApp() {
     try {
       let voucherPayload: { cumulativeAmount: string; sig: Hex };
       try {
-        voucherPayload = JSON.parse(
-          Buffer.from(voucherHeader, 'base64').toString('utf8')
+        try {
+          voucherPayload = JSON.parse(
+            Buffer.from(voucherHeader, 'base64').toString('utf8')
+          );
+        } catch {
+          voucherPayload = JSON.parse(voucherHeader);
+        }
+      } catch (e: any) {
+        return c.json(
+          { error: 'Bad Request', message: `Invalid voucher format: ${e?.message}` },
+          400
         );
-      } catch {
-        voucherPayload = JSON.parse(voucherHeader);
       }
 
-      const cumulativeAmount = BigInt(voucherPayload.cumulativeAmount);
-      const sig = voucherPayload.sig;
+      let cumulativeAmount: bigint;
+      let sig: Hex;
+      try {
+        cumulativeAmount = BigInt(voucherPayload.cumulativeAmount);
+        sig = voucherPayload.sig;
+      } catch (e: any) {
+        return c.json(
+          { error: 'Bad Request', message: `Invalid voucher fields: ${e?.message}` },
+          400
+        );
+      }
 
+      // Record under the per-channel lock so concurrent duplicates can't double-serve;
+      // rolled back below if content generation fails.
       const verification = await verifier.verifyVoucher({
         channelId,
         cumulativeAmount,
         sig,
         price: PRICE_PER_CALL,
+        record: true,
       });
 
       if (!verification.valid) {
@@ -94,8 +114,6 @@ export function createSummarizerSellerApp() {
           403
         );
       }
-
-      batcher.recordVoucher(channelId, cumulativeAmount, sig);
 
       const body = await c.req.json().catch(() => ({}));
       const inputText = body?.text || 'No text provided.';
@@ -117,26 +135,38 @@ export function createSummarizerSellerApp() {
           });
           summary = completion.choices[0]?.message?.content || 'Unable to generate summary.';
         } catch (e: any) {
-          summary = `[Fast Fallback Summary]: ${inputText.slice(0, 120)}...`;
+          // Never charge for content we failed to produce
+          await verifier.rollbackVoucher(
+            channelId,
+            cumulativeAmount,
+            verification.previousAmount ?? 0n
+          );
+          return c.json(
+            { error: 'Bad Gateway', message: 'Failed to generate summary via OpenAI' },
+            502
+          );
         }
       } else {
         // Fast local fallback summary
         summary = `[Fast Summary]: Key takeaways: ${inputText.slice(0, 100)}... (Processed ${inputText.length} chars)`;
       }
 
+      batcher.recordVoucher(channelId, cumulativeAmount, sig);
+
       const tEnd = Date.now();
       const latencyMs = tEnd - tStart;
       const clientAddress = verification.channel?.agent || '0x011CE11111111111111111111111111111111111';
 
+      const nonce = Date.now();
       const feedbackAuth = {
         payee: SUMMARIZER_SELLER_ACCOUNT.address,
         payeeAgentId: Number(PAYEE_AGENT_ID),
         channelId,
         cumulativeAmount: String(cumulativeAmount),
         client: clientAddress,
-        nonce: Date.now(),
+        nonce,
         sig: await SUMMARIZER_SELLER_ACCOUNT.signMessage({
-          message: `ERC8004_FEEDBACK_AUTH:${PAYEE_AGENT_ID}:${channelId}:${cumulativeAmount}:${clientAddress}`,
+          message: `ERC8004_FEEDBACK_AUTH:${PAYEE_AGENT_ID}:${channelId}:${cumulativeAmount}:${clientAddress}:${nonce}`,
         }),
       };
 
@@ -144,6 +174,14 @@ export function createSummarizerSellerApp() {
         summary,
         charCount: inputText.length,
       };
+
+      reportUsage({
+        seller: 'SummarizerSeller',
+        priceUnits: PRICE_PER_CALL,
+        latencyMs,
+        buyer: clientAddress,
+        channelId,
+      });
 
       return c.json(
         {

@@ -53,8 +53,10 @@ Which seller endpoint should be hired? Return JSON: {"selectedEndpoint": "url", 
     }
   }
 
-  async runLoop(iterations = 5, intervalMs = 2500) {
+  // Returns the number of iterations that failed.
+  async runLoop(iterations = 5, intervalMs = 2500): Promise<number> {
     this.isRunning = true;
+    let failures = 0;
     console.log(`[Tier B Planner ${this.account.address.slice(0, 8)}] Starting planning loop...`);
 
     const tasks = [
@@ -81,7 +83,7 @@ Which seller endpoint should be hired? Return JSON: {"selectedEndpoint": "url", 
           BigInt(card.minChannelDeposit)
         );
 
-        const { cumulativeAmount, sig } = await this.channelManager.createVoucher(
+        const { cumulativeAmount, sig, channelId: activeChannelId } = await this.channelManager.createVoucher(
           card.sellerAddress,
           channelId,
           BigInt(card.priceUnits)
@@ -96,22 +98,30 @@ Which seller endpoint should be hired? Return JSON: {"selectedEndpoint": "url", 
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'X-Channel-Id': channelId,
+            'X-Channel-Id': activeChannelId,
             'X-Voucher': voucherHeader,
           },
           body: JSON.stringify({ text: task }),
         });
 
-        const data = await res.json();
+        await res.json();
+        if (res.status < 200 || res.status >= 300) failures++;
         console.log(`[Tier B Plan #${i + 1}] Task: "${task.slice(0, 30)}..." -> Hired: ${card.name} (${Date.now() - tStart}ms)`);
       } catch (err: any) {
+        failures++;
         console.error(`[Tier B Plan #${i + 1}] Error:`, err?.message || err);
       }
       await new Promise((r) => setTimeout(r, intervalMs));
     }
+
+    return failures;
   }
 
   stop() {
     this.isRunning = false;
+  }
+
+  async closeAllChannels(): Promise<number> {
+    return this.channelManager.closeAllChannels();
   }
 }

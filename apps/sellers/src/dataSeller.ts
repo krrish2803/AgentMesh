@@ -4,6 +4,7 @@ import { type Hex } from 'viem';
 import { CONFIG, DATA_SELLER_ACCOUNT } from './config.js';
 import { VoucherVerifier } from './verify.js';
 import { ClaimBatcher } from './batcher.js';
+import { reportUsage } from './usage.js';
 
 export function createDataSellerApp() {
   const app = new Hono();
@@ -18,7 +19,7 @@ export function createDataSellerApp() {
   });
 
   const PRICE_PER_CALL = 100n; // $0.0001 USDC (6 decimals)
-  const PAYEE_AGENT_ID = 101n;
+  const PAYEE_AGENT_ID = CONFIG.DATA_SELLER_AGENT_ID;
 
   // Agent Card metadata
   app.get('/card', (c) => {
@@ -62,15 +63,31 @@ export function createDataSellerApp() {
     try {
       let voucherPayload: { cumulativeAmount: string; sig: Hex };
       try {
-        voucherPayload = JSON.parse(
-          Buffer.from(voucherHeader, 'base64').toString('utf8')
+        try {
+          voucherPayload = JSON.parse(
+            Buffer.from(voucherHeader, 'base64').toString('utf8')
+          );
+        } catch {
+          voucherPayload = JSON.parse(voucherHeader);
+        }
+      } catch (e: any) {
+        return c.json(
+          { error: 'Bad Request', message: `Invalid voucher format: ${e?.message}` },
+          400
         );
-      } catch {
-        voucherPayload = JSON.parse(voucherHeader);
       }
 
-      const cumulativeAmount = BigInt(voucherPayload.cumulativeAmount);
-      const sig = voucherPayload.sig;
+      let cumulativeAmount: bigint;
+      let sig: Hex;
+      try {
+        cumulativeAmount = BigInt(voucherPayload.cumulativeAmount);
+        sig = voucherPayload.sig;
+      } catch (e: any) {
+        return c.json(
+          { error: 'Bad Request', message: `Invalid voucher fields: ${e?.message}` },
+          400
+        );
+      }
 
       const verification = await verifier.verifyVoucher({
         channelId,
@@ -100,15 +117,16 @@ export function createDataSellerApp() {
       const sentimentScore = +(Math.random() * 2 - 1).toFixed(3); // -1.0 to 1.0
       const clientAddress = verification.channel?.agent || '0x011CE11111111111111111111111111111111111';
 
+      const nonce = Date.now();
       const feedbackAuth = {
         payee: DATA_SELLER_ACCOUNT.address,
         payeeAgentId: Number(PAYEE_AGENT_ID),
         channelId,
         cumulativeAmount: String(cumulativeAmount),
         client: clientAddress,
-        nonce: Date.now(),
+        nonce,
         sig: await DATA_SELLER_ACCOUNT.signMessage({
-          message: `ERC8004_FEEDBACK_AUTH:${PAYEE_AGENT_ID}:${channelId}:${cumulativeAmount}:${clientAddress}`,
+          message: `ERC8004_FEEDBACK_AUTH:${PAYEE_AGENT_ID}:${channelId}:${cumulativeAmount}:${clientAddress}:${nonce}`,
         }),
       };
 
@@ -119,6 +137,14 @@ export function createDataSellerApp() {
         timestamp: new Date().toISOString(),
         isSimulated: true,
       };
+
+      reportUsage({
+        seller: 'DataSeller',
+        priceUnits: PRICE_PER_CALL,
+        latencyMs,
+        buyer: clientAddress,
+        channelId,
+      });
 
       return c.json(
         {

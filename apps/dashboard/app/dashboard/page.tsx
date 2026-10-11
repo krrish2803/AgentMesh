@@ -1,16 +1,19 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { Navbar } from '@/components/Navbar';
 import { VaultCard } from '@/components/VaultCard';
 import { MetricsPanel } from '@/components/MetricsPanel';
-import { RoguePanel, type RogueRevertFeedback } from '@/components/RoguePanel';
-import { LiveFeed, type FeedEvent } from '@/components/LiveFeed';
-import { AgentsList, type AgentItem } from '@/components/AgentsList';
-import { ReputationTable, type SellerReputation } from '@/components/ReputationTable';
-import { Play, Fingerprint, ExternalLink, Shield, ArrowLeft } from 'lucide-react';
+import { RoguePanel } from '@/components/RoguePanel';
+import { SafetyReport } from '@/components/SafetyReport';
+import { LiveStatsStrip } from '@/components/LiveStatsStrip';
+import { LiveFeed } from '@/components/LiveFeed';
+import { AgentsList } from '@/components/AgentsList';
+import { ReputationTable } from '@/components/ReputationTable';
+import { ExternalLink, ArrowLeft } from 'lucide-react';
+import { useSpendGuardConsole } from '@/lib/useSpendGuardConsole';
 
 const TheMeshCanvas = dynamic(() => import('@/scene/TheMeshCanvas'), {
   ssr: false,
@@ -22,215 +25,30 @@ const TheMeshCanvas = dynamic(() => import('@/scene/TheMeshCanvas'), {
 });
 
 export default function DedicatedDashboardPage() {
-  const [is2D, setIs2D] = useState(false);
-  const [shockwave, setShockwave] = useState(false);
-  const [vaultBalance, setVaultBalance] = useState(1000.0);
-  const [events, setEvents] = useState<FeedEvent[]>([]);
-  const [lastFeedback, setLastFeedback] = useState<RogueRevertFeedback | null>(null);
-  const [simulating, setSimulating] = useState(false);
+  const {
+    is2D,
+    setIs2D,
+    shockwave,
+    vault,
+    vaultStatus,
+    control,
+    events,
+    lastFeedback,
+    safetyReport,
+    metrics,
+    metricsStatus,
+    agentsStatus,
+    agents,
+    sellers,
+    fundVault,
+    revokeAgent,
+    reinstateAgent,
+    handleTriggerRogue,
+  } = useSpendGuardConsole();
 
-  const [metrics, setMetrics] = useState({
-    totalCalls: 214,
-    totalVolumeUSDC: 0.32,
-    onChainTxCount: 14,
-    p50LatencyMs: 34,
-    p95LatencyMs: 82,
-    rejectedCount: 7,
-  });
-
-  const [agents, setAgents] = useState<AgentItem[]>([
-    {
-      address: '0x011CE11111111111111111111111111111111111',
-      role: 'Sentiment Buyer (Deterministic)',
-      tier: 'A',
-      erc8004Id: 201,
-      budgetLimit: 50.0,
-      budgetSpent: 0.24,
-      active: true,
-    },
-    {
-      address: '0x022CE22222222222222222222222222222222222',
-      role: 'Macro Research Planner (5% LLM)',
-      tier: 'B',
-      erc8004Id: 202,
-      budgetLimit: 50.0,
-      budgetSpent: 0.65,
-      active: true,
-    },
-    {
-      address: '0x033CE33333333333333333333333333333333333',
-      role: 'Autonomous Tool Executor (Prompt-Injection Target)',
-      tier: 'C',
-      erc8004Id: 203,
-      budgetLimit: 50.0,
-      budgetSpent: 1.15,
-      active: true,
-    },
-  ]);
-
-  const [sellers] = useState<SellerReputation[]>([
-    {
-      agentId: 101,
-      name: 'DataSeller',
-      score: 96,
-      settledVolumeUSDC: '14.20',
-      uniquePayers: 12,
-      tier: 'Verified Data Provider',
-    },
-    {
-      agentId: 102,
-      name: 'SummarizerSeller',
-      score: 92,
-      settledVolumeUSDC: '38.50',
-      uniquePayers: 19,
-      tier: 'Verified LLM Service',
-    },
-    {
-      agentId: 103,
-      name: 'UnverifiedSeller (Rogue Target)',
-      score: 28,
-      settledVolumeUSDC: '0.00',
-      uniquePayers: 0,
-      tier: 'Untrusted',
-    },
-  ]);
-
-  // Connect to live WebSocket if available
-  useEffect(() => {
-    let ws: WebSocket | null = null;
-    try {
-      ws = new WebSocket('ws://localhost:8005/ws/events');
-      ws.onmessage = (msg) => {
-        try {
-          const ev: FeedEvent = JSON.parse(msg.data);
-          setEvents((prev) => [ev, ...prev].slice(0, 100));
-          if (ev.type === 'rejection') {
-            triggerShockwaveEffect();
-          }
-        } catch {}
-      };
-    } catch {}
-
-    return () => {
-      if (ws) ws.close();
-    };
-  }, []);
-
-  const triggerShockwaveEffect = () => {
-    setShockwave(true);
-    setTimeout(() => setShockwave(false), 2000);
-  };
-
-  const handleFundVault = (amount: number) => {
-    setVaultBalance((b) => b + amount);
-    const newEvent: FeedEvent = {
-      seq: Date.now(),
-      ts: Date.now(),
-      type: 'vault.funded',
-      payload: { amount, newBalance: vaultBalance + amount },
-    };
-    setEvents((prev) => [newEvent, ...prev]);
-  };
-
-  const handleRevokeAgent = (address: string) => {
-    setAgents((prev) =>
-      prev.map((ag) => (ag.address.toLowerCase() === address.toLowerCase() ? { ...ag, active: false } : ag))
-    );
-    const newEvent: FeedEvent = {
-      seq: Date.now(),
-      ts: Date.now(),
-      type: 'agent.revoked',
-      payload: { address },
-    };
-    setEvents((prev) => [newEvent, ...prev]);
-    triggerShockwaveEffect();
-  };
-
-  const handleTriggerRogue = async (scenario: string) => {
-    triggerShockwaveEffect();
-    try {
-      const res = await fetch(`http://localhost:8005/api/rogue/${scenario}`, { method: 'POST' });
-      const data = await res.json();
-      setLastFeedback({
-        scenario: `Scenario #${scenario}`,
-        error: data.error,
-        message: data.message,
-        timestamp: new Date().toLocaleTimeString(),
-      });
-      setMetrics((m) => ({ ...m, rejectedCount: m.rejectedCount + 1 }));
-    } catch {
-      const fallbackMap: Record<string, string> = {
-        '1': 'OverChannelCap: Request exceeds per-channel cap of $10.00',
-        '2': 'WindowBudgetExceeded: Rolling window budget exceeded',
-        '3': 'PayeeNotRegistered: Payee missing ERC-8004 identity',
-        '4': 'PayeeReputationTooLow: Payee reputation score < 50',
-        '5': 'AgentRevoked: Revoked agent cannot open channel',
-        '6': 'VoucherExceedsDeposit: Cumulative amount exceeds deposit',
-      };
-      const errName = fallbackMap[scenario]?.split(':')[0] || 'SpendGuardRevert';
-      setLastFeedback({
-        scenario: `Scenario #${scenario}`,
-        error: errName,
-        message: fallbackMap[scenario] || 'Policy violation prevented',
-        timestamp: new Date().toLocaleTimeString(),
-      });
-      setMetrics((m) => ({ ...m, rejectedCount: m.rejectedCount + 1 }));
-    }
-  };
-
-  const handleTriggerPromptInjection = async () => {
-    triggerShockwaveEffect();
-    try {
-      const res = await fetch('http://localhost:8005/api/prompt-injection', { method: 'POST' });
-      const data = await res.json();
-      setLastFeedback({
-        scenario: 'Prompt Injection Defense',
-        error: data.error,
-        message: 'Adversarial prompt bypassed LLM prompt, but halted by SpendGuard contract on-chain ($500 > $10 cap)',
-        timestamp: new Date().toLocaleTimeString(),
-      });
-      setMetrics((m) => ({ ...m, rejectedCount: m.rejectedCount + 1 }));
-    } catch {
-      setLastFeedback({
-        scenario: 'Prompt Injection Defense',
-        error: 'OverChannelCap',
-        message: 'Adversarial injection blocked on-chain by SpendGuard envelope',
-        timestamp: new Date().toLocaleTimeString(),
-      });
-      setMetrics((m) => ({ ...m, rejectedCount: m.rejectedCount + 1 }));
-    }
-  };
-
-  const handleSimulateBurstCalls = async () => {
-    setSimulating(true);
-    for (let i = 0; i < 5; i++) {
-      const seller = i % 2 === 0 ? 'DataSeller' : 'SummarizerSeller';
-      const price = seller === 'DataSeller' ? 0.0001 : 0.001;
-      const latency = Math.floor(Math.random() * 35) + 25;
-
-      const ev: FeedEvent = {
-        seq: Date.now() + i,
-        ts: Date.now(),
-        type: 'call.paid',
-        payload: {
-          seller,
-          priceUSDC: price,
-          latencyMs: latency,
-          buyer: '0x011CE11111111111111111111111111111111111',
-        },
-      };
-
-      setEvents((prev) => [ev, ...prev].slice(0, 100));
-      setMetrics((m) => ({
-        ...m,
-        totalCalls: m.totalCalls + 1,
-        totalVolumeUSDC: +(m.totalVolumeUSDC + price).toFixed(4),
-      }));
-
-      await new Promise((r) => setTimeout(r, 200));
-    }
-    setSimulating(false);
-  };
+  const ownerLabel = vault.owner
+    ? `${vault.owner.slice(0, 8)}…${vault.owner.slice(-4)}`
+    : '—';
 
   return (
     <div className="min-h-screen bg-[#090a0f] text-slate-100 flex flex-col font-sans">
@@ -255,7 +73,8 @@ export default function DedicatedDashboardPage() {
                 </span>
               </div>
               <p className="text-xs text-slate-400">
-                Connected Owner: <span className="font-mono text-slate-200">0x8a92D956...e31b</span> • Face ID Authenticated
+                Connected Owner: <span className="font-mono text-slate-200">{ownerLabel}</span>
+                {control ? ' • Server signing enabled' : ' • Read-only (owner key not configured)'}
               </p>
             </div>
           </div>
@@ -269,25 +88,29 @@ export default function DedicatedDashboardPage() {
             >
               MON Faucet <ExternalLink className="w-3 h-3 text-slate-400" />
             </a>
-
-            <button
-              onClick={handleSimulateBurstCalls}
-              disabled={simulating}
-              className="px-4 py-2 rounded-xl bg-gradient-to-r from-monad-600 to-monad-500 hover:from-monad-500 hover:to-monad-400 text-white text-xs font-bold flex items-center gap-2 shadow-lg shadow-monad-700/30 transition-all"
-            >
-              <Play className="w-3.5 h-3.5" />
-              {simulating ? 'Streaming Vouchers...' : 'Fire 5 Micropayments'}
-            </button>
           </div>
         </div>
+
+        {/* Live number strip: paid calls vs on-chain txs proves the channel economics */}
+        <LiveStatsStrip metrics={metrics} status={metricsStatus} />
 
         {/* 3D The Mesh Canvas + SpendGuard Vault Card */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 h-[440px] rounded-2xl overflow-hidden shadow-2xl relative">
-            <TheMeshCanvas shockwave={shockwave} is2D={is2D} />
+            <TheMeshCanvas shockwave={shockwave} is2D={is2D} vaultBalance={vault.vaultBalanceUSDC ?? 0} />
           </div>
           <div className="flex flex-col gap-6">
-            <VaultCard balance={vaultBalance} onFund={handleFundVault} />
+            <VaultCard
+              balance={vault.vaultBalanceUSDC}
+              ownerBalance={vault.ownerUSDCBalance}
+              ownerAddress={vault.owner}
+              perChannelCap={agents[0]?.maxPerChannel ?? 10}
+              windowBudget={agents[0]?.budgetLimit ?? 5}
+              minPayeeRep={agents[0]?.minPayeeRep ?? 50}
+              control={control}
+              status={vaultStatus}
+              onFund={fundVault}
+            />
           </div>
         </div>
 
@@ -299,21 +122,30 @@ export default function DedicatedDashboardPage() {
           p95LatencyMs={metrics.p95LatencyMs}
           rejectedCount={metrics.rejectedCount}
           totalVolume={metrics.totalVolumeUSDC}
+          metricsStatus={metricsStatus}
         />
 
-        {/* Lower Grid: Rogue Agent Panel + Live Feed */}
+        {/* Lower Grid: Rogue Agent Panel + Safety Report + Live Feed */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <RoguePanel
-            onTriggerRogue={handleTriggerRogue}
-            onTriggerPromptInjection={handleTriggerPromptInjection}
-            lastFeedback={lastFeedback}
-          />
+          <div className="flex flex-col gap-6">
+            <RoguePanel
+              onTriggerRogue={handleTriggerRogue}
+              lastFeedback={lastFeedback}
+            />
+            <SafetyReport rows={safetyReport} />
+          </div>
           <LiveFeed events={events} />
         </div>
 
         {/* Swarm & Reputation Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <AgentsList agents={agents} onRevoke={handleRevokeAgent} />
+          <AgentsList
+            agents={agents}
+            control={control}
+            status={agentsStatus}
+            onRevoke={revokeAgent}
+            onReinstate={reinstateAgent}
+          />
           <ReputationTable sellers={sellers} />
         </div>
       </main>

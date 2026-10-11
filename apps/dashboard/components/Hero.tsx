@@ -2,7 +2,7 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { Shield, Fingerprint, ArrowRight, Zap, CheckCircle2, Lock, Cpu, LayoutDashboard, UserPlus } from 'lucide-react';
+import { Shield, Lock, LayoutDashboard, UserPlus } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 
 export function Hero({ onExploreDemo }: { onExploreDemo: () => void }) {

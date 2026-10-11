@@ -2,7 +2,7 @@
 
 import React, { useRef, useMemo } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
-import { OrbitControls, Text, Float } from '@react-three/drei';
+import { OrbitControls, Text } from '@react-three/drei';
 import * as THREE from 'three';
 
 // 3D Vault in the center
@@ -177,7 +177,13 @@ class CanvasErrorBoundary extends React.Component<
   }
 }
 
-function TwoDimensionalFallback({ shockwave = false }: { shockwave?: boolean }) {
+function TwoDimensionalFallback({
+  shockwave = false,
+  balance = 1000,
+}: {
+  shockwave?: boolean;
+  balance?: number;
+}) {
   return (
     <div className="w-full h-full flex items-center justify-center bg-[#090a12] p-8 border border-monad-900/60 rounded-xl">
       <div className="w-full max-w-2xl grid grid-cols-3 gap-6 items-center text-center">
@@ -209,7 +215,9 @@ function TwoDimensionalFallback({ shockwave = false }: { shockwave?: boolean }) 
           >
             <div className="text-2xl font-black text-monad-500">🛡️</div>
             <div className="text-xs font-bold text-white mt-1">SpendGuard</div>
-            <div className="text-[10px] text-monad-300">$1,000.00 Vault</div>
+            <div className="text-[10px] text-monad-300">
+              ${balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Vault
+            </div>
           </div>
           <div className="text-[11px] text-slate-400 mt-2">Monad Testnet (10143)</div>
         </div>
@@ -234,16 +242,18 @@ function TwoDimensionalFallback({ shockwave = false }: { shockwave?: boolean }) 
 export default function TheMeshCanvas({
   shockwave = false,
   is2D = false,
+  vaultBalance = 1000,
 }: {
   shockwave?: boolean;
   is2D?: boolean;
+  vaultBalance?: number;
 }) {
   if (is2D) {
-    return <TwoDimensionalFallback shockwave={shockwave} />;
+    return <TwoDimensionalFallback shockwave={shockwave} balance={vaultBalance} />;
   }
 
   return (
-    <CanvasErrorBoundary fallback={<TwoDimensionalFallback shockwave={shockwave} />}>
+    <CanvasErrorBoundary fallback={<TwoDimensionalFallback shockwave={shockwave} balance={vaultBalance} />}>
       <div className="w-full h-full relative bg-gradient-to-b from-[#090a12] via-[#0d0e1a] to-[#090a12] rounded-xl overflow-hidden border border-monad-900/60">
         <Canvas camera={{ position: [0, 2, 8.5], fov: 45 }}>
           <ambientLight intensity={0.6} />
@@ -259,7 +269,7 @@ export default function TheMeshCanvas({
           />
 
           {/* Center Vault */}
-          <VaultNode balance={1000} shockwave={shockwave} />
+          <VaultNode balance={vaultBalance} shockwave={shockwave} />
 
           {/* Left Buyers Arc */}
           <BuyerNode position={[-4.2, 1.4, 0]} label="Buyer Tier A" tier="Fast" />

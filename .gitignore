@@ -18,3 +18,7 @@ contracts/lib/
 # OS
 .DS_Store
 *.swp
+
+# Runtime state
+.voucher-state.json
+tsconfig.tsbuildinfo

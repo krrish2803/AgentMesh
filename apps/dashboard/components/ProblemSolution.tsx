@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { AlertOctagon, CheckCircle2, ShieldX, ShieldCheck, DollarSign, RefreshCw, Terminal, Layers } from 'lucide-react';
+import { ShieldX, ShieldCheck } from 'lucide-react';
 
 export function ProblemSolution() {
   return (

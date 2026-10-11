@@ -1,13 +1,46 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Radio, CheckCircle, ShieldAlert, Zap, FileText } from 'lucide-react';
+import { Radio, CheckCircle, ShieldAlert, Zap, ExternalLink } from 'lucide-react';
 
 export interface FeedEvent {
   seq: number;
   ts: number;
   type: string;
   payload: any;
+}
+
+function shortHash(h?: string | null): string {
+  if (!h || typeof h !== 'string') return '';
+  return `${h.slice(0, 8)}…${h.slice(-6)}`;
+}
+
+function describe(ev: FeedEvent): { title: string; detail: string } | null {
+  const p = ev.payload || {};
+  switch (ev.type) {
+    case 'channel.opened':
+      return {
+        title: `Channel opened · ${p.depositUSDC ?? '?'} USDC`,
+        detail: `${shortHash(p.channelId)} · payee ${shortHash(p.payee)}`,
+      };
+    case 'claim.confirmed':
+      return {
+        title: `Claim settled · ${p.deltaUSDC ?? '?'} USDC`,
+        detail: `${shortHash(p.channelId)} · cumulative ${p.cumulativeUSDC ?? '?'}`,
+      };
+    case 'channel.closed':
+      return {
+        title: `Channel closed · refunded ${p.refundedUSDC ?? '?'} USDC`,
+        detail: `${shortHash(p.channelId)} · claimed ${p.claimedUSDC ?? '?'}`,
+      };
+    case 'vault.funded':
+      return {
+        title: `Vault funded · +${p.amountUSDC ?? '?'} USDC`,
+        detail: `new balance ${p.newBalanceUSDC ?? '?'} USDC`,
+      };
+    default:
+      return null;
+  }
 }
 
 export function LiveFeed({ events }: { events: FeedEvent[] }) {
@@ -99,13 +132,51 @@ export function LiveFeed({ events }: { events: FeedEvent[] }) {
                     <div className="text-[11px] text-red-300/80 mt-0.5">
                       {ev.payload.humanMessage}
                     </div>
+                    {ev.payload.explorerUrl && (
+                      <a
+                        href={ev.payload.explorerUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 mt-1 text-[10px] text-red-300 hover:text-red-200 font-semibold"
+                      >
+                        View enforcement on Monadscan <ExternalLink className="w-3 h-3" />
+                      </a>
+                    )}
                   </div>
                 )}
 
                 {!isCall && !isRejection && (
-                  <div className="text-[11px] text-slate-300 truncate">
-                    {JSON.stringify(ev.payload)}
-                  </div>
+                  (() => {
+                    const d = describe(ev);
+                    const url = ev.payload?.explorerUrl;
+                    return (
+                      <div className="text-xs">
+                        {d ? (
+                          <>
+                            <div className="text-slate-200 font-semibold">{d.title}</div>
+                            <div className="text-[10px] text-slate-400 mt-0.5 truncate">
+                              {d.detail}
+                            </div>
+                          </>
+                        ) : (
+                          <div className="text-[11px] text-slate-300 truncate">
+                            {JSON.stringify(ev.payload)}
+                          </div>
+                        )}
+                        {url && (
+                          <a
+                            href={url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1 mt-1 text-[10px] text-emerald-400 hover:text-emerald-300 font-semibold"
+                          >
+                            {shortHash(ev.payload?.txHash) || 'View'} on Monadscan
+                            <ExternalLink className="w-3 h-3" />
+                          </a>
+                        )}
+                      </div>
+                    );
+                  })()
                 )}
               </div>
             );

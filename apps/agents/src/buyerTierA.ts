@@ -31,8 +31,12 @@ export class DeterministicBuyer {
     // 1. Initial 402 ping or channel check
     const channelId = await this.channelManager.ensureChannel(payee, payeeAgentId, minDeposit);
 
-    // 2. Generate signed voucher
-    const { cumulativeAmount, sig } = await this.channelManager.createVoucher(payee, channelId, price);
+    // 2. Generate signed voucher (may rotate to a fresh channel if this one is exhausted)
+    const { cumulativeAmount, sig, channelId: activeChannelId } = await this.channelManager.createVoucher(
+      payee,
+      channelId,
+      price
+    );
 
     const voucherHeader = Buffer.from(
       JSON.stringify({
@@ -47,7 +51,7 @@ export class DeterministicBuyer {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-Channel-Id': channelId,
+        'X-Channel-Id': activeChannelId,
         'X-Voucher': voucherHeader,
       },
       body: JSON.stringify({ text: 'Monad high-throughput parallel execution update.' }),
@@ -66,8 +70,10 @@ export class DeterministicBuyer {
     };
   }
 
-  async runLoop(iterations = 10, intervalMs = 1500) {
+  // Returns the number of iterations that failed.
+  async runLoop(iterations = 10, intervalMs = 1500): Promise<number> {
     this.isRunning = true;
+    let failures = 0;
     console.log(`[Tier A Buyer ${this.account.address.slice(0, 8)}] Starting loop (${iterations} calls)...`);
 
     for (let i = 0; i < iterations && this.isRunning; i++) {
@@ -75,14 +81,22 @@ export class DeterministicBuyer {
         const targetUrl = i % 2 === 0 ? CONFIG.DATA_SELLER_URL : CONFIG.SUMMARIZER_SELLER_URL;
         const result = await this.executeCall(targetUrl);
         console.log(`[Tier A Call #${i + 1}] Target: ${result.seller} -> Latency: ${result.latencyMs}ms -> Status: ${result.status}`);
+        if (result.status < 200 || result.status >= 300) failures++;
       } catch (err: any) {
+        failures++;
         console.error(`[Tier A Call #${i + 1}] Error:`, err?.message || err);
       }
       await new Promise((r) => setTimeout(r, intervalMs));
     }
+
+    return failures;
   }
 
   stop() {
     this.isRunning = false;
+  }
+
+  async closeAllChannels(): Promise<number> {
+    return this.channelManager.closeAllChannels();
   }
 }

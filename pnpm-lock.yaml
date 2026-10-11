@@ -22,7 +22,7 @@ importers:
         version: 16.6.1
       openai:
         specifier: ^4.85.0
-        version: 4.104.0(ws@8.22.0)
+        version: 4.104.0(ws@8.21.0)
       viem:
         specifier: ^2.23.0
         version: 2.57.3(typescript@5.9.3)
@@ -137,9 +137,6 @@ importers:
       '@agentmesh/sdk':
         specifier: workspace:*
         version: link:../../packages/sdk
-      '@hono/node-server':
-        specifier: ^1.13.8
-        version: 1.19.17(hono@4.13.13)
       dotenv:
         specifier: ^16.4.7
         version: 16.6.1
@@ -3082,6 +3079,20 @@ snapshots:
   object-assign@4.1.1: {}
 
   object-hash@3.0.0: {}
+
+  openai@4.104.0(ws@8.21.0):
+    dependencies:
+      '@types/node': 18.19.130
+      '@types/node-fetch': 2.6.13
+      abort-controller: 3.0.0
+      agentkeepalive: 4.6.0
+      form-data-encoder: 1.7.2
+      formdata-node: 4.4.1
+      node-fetch: 2.7.0
+    optionalDependencies:
+      ws: 8.21.0
+    transitivePeerDependencies:
+      - encoding
 
   openai@4.104.0(ws@8.22.0):
     dependencies:

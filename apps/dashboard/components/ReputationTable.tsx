@@ -36,6 +36,13 @@ export function ReputationTable({ sellers }: { sellers: SellerReputation[] }) {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-800/60">
+            {sellers.length === 0 && (
+              <tr>
+                <td colSpan={6} className="py-10 text-center text-slate-500 font-mono text-xs">
+                  No registered sellers yet — run the agent swarm to generate on-chain reputation.
+                </td>
+              </tr>
+            )}
             {sellers.map((s) => {
               const isLow = s.score < 50;
 

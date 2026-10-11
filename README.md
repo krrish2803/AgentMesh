@@ -43,7 +43,7 @@ agentmesh/
 ├── packages/sdk/       # Shared TypeScript SDK (viem, EIP-712 typed vouchers, error decoding)
 ├── apps/sellers/       # Hono HTTP 402 Seller Services (DataSeller @ $0.0001, Summarizer @ $0.001)
 ├── apps/agents/        # Autonomous Buyer Swarm (Tier A Deterministic, Tier B Planner, Tier C Tool-Calling)
-├── apps/server/        # Hono REST API & WebSocket Telemetry Hub + Nonce Manager
+├── apps/server/        # Hono REST API & WebSocket Telemetry Hub
 └── apps/dashboard/     # Next.js 15 + React 19 + Three.js / React Three Fiber 3D Mesh Scene
 ```
 
@@ -99,7 +99,7 @@ pnpm build
 # 1. Start Seller Services (ports 8101 & 8102)
 pnpm sellers:dev
 
-# 2. Start Coordination & Telemetry Hub (port 8000)
+# 2. Start Coordination & Telemetry Hub (port 8005)
 pnpm server:dev
 
 # 3. Start Next.js Dashboard & 3D Mesh (port 3000)

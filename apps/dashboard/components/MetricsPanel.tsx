@@ -4,12 +4,13 @@ import React from 'react';
 import { Zap, ShieldAlert, Cpu, Activity } from 'lucide-react';
 
 export function MetricsPanel({
-  totalCalls = 184,
-  onChainTxCount = 12,
-  p50LatencyMs = 38,
-  p95LatencyMs = 86,
-  rejectedCount = 6,
-  totalVolume = 0.28,
+  totalCalls = 0,
+  onChainTxCount = 0,
+  p50LatencyMs = 0,
+  p95LatencyMs = 0,
+  rejectedCount = 0,
+  totalVolume = 0,
+  metricsStatus = 'connecting',
 }: {
   totalCalls?: number;
   onChainTxCount?: number;
@@ -17,8 +18,10 @@ export function MetricsPanel({
   p95LatencyMs?: number;
   rejectedCount?: number;
   totalVolume?: number;
+  metricsStatus?: 'live' | 'offline' | 'connecting';
 }) {
-  const compressionRatio = onChainTxCount > 0 ? (totalCalls / onChainTxCount).toFixed(1) : '15.3';
+  const compressionRatio =
+    onChainTxCount > 0 && totalCalls > 0 ? `${(totalCalls / onChainTxCount).toFixed(1)}x` : '—';
 
   return (
     <div className="bg-[#0f111e]/90 border border-monad-900/80 rounded-2xl p-5 shadow-xl shadow-black/40">
@@ -27,7 +30,13 @@ export function MetricsPanel({
           <Activity className="w-4 h-4 text-monad-400" />
           <h3 className="text-sm font-bold text-white tracking-tight">Performance & Safety HUD</h3>
         </div>
-        <span className="text-[11px] font-mono text-monad-400">Live Measured</span>
+        {metricsStatus === 'live' ? (
+          <span className="text-[11px] font-mono text-emerald-400">Live Measured</span>
+        ) : metricsStatus === 'connecting' ? (
+          <span className="text-[11px] font-mono text-slate-400">Connecting…</span>
+        ) : (
+          <span className="text-[11px] font-mono text-amber-400">Server offline — no data</span>
+        )}
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -53,7 +62,7 @@ export function MetricsPanel({
             {totalCalls} <span className="text-xs font-normal text-slate-400">calls / {onChainTxCount} txs</span>
           </div>
           <div className="text-[10px] text-emerald-400 mt-0.5 font-semibold">
-            {compressionRatio}x Monad scaling efficiency
+            {compressionRatio === '—' ? 'no settlement yet' : `${compressionRatio} Monad scaling efficiency`}
           </div>
         </div>
 

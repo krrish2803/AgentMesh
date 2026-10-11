@@ -1,20 +1,16 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Fingerprint,
   CheckCircle2,
-  Shield,
   X,
   ArrowRight,
   Key,
   Sparkles,
-  Smartphone,
-  Laptop,
   Check,
   Copy,
-  ExternalLink,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 
@@ -28,6 +24,7 @@ export function AuthModal() {
   const [step, setStep] = useState<'idle' | 'scanning' | 'deriving' | 'success'>('idle');
   const [derivedAddress, setDerivedAddress] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Sync tab with external mode change
   React.useEffect(() => {
@@ -35,13 +32,23 @@ export function AuthModal() {
     setStep('idle');
   }, [authModalMode, isAuthModalOpen]);
 
+  useEffect(() => {
+    return () => {
+      if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current);
+    };
+  }, []);
+
   if (!isAuthModalOpen) return null;
 
   const handleCopy = () => {
     if (derivedAddress) {
       navigator.clipboard.writeText(derivedAddress);
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current);
+      copiedTimerRef.current = setTimeout(() => {
+        copiedTimerRef.current = null;
+        setCopied(false);
+      }, 2000);
     }
   };
 

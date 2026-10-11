@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Fingerprint, Search, Shield, Zap, ArrowDown, Database, CheckCircle2 } from 'lucide-react';
+import { Fingerprint, Search, Shield, Zap, Database, CheckCircle2 } from 'lucide-react';
 
 export function HowItWorks() {
   const steps = [

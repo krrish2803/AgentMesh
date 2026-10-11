@@ -1,4 +1,5 @@
 import { decodeErrorResult } from 'viem';
+import type { Abi } from 'viem';
 import SpendGuardAbi from './abis/SpendGuard.json';
 
 export interface DecodedContractError {
@@ -7,19 +8,55 @@ export interface DecodedContractError {
   humanMessage: string;
 }
 
-export function decodeSpendGuardError(error: any): DecodedContractError | null {
+export function decodeSpendGuardError(error: unknown): DecodedContractError | null {
+  const knownErrors = [
+    'OverChannelCap',
+    'WindowBudgetExceeded',
+    'PayeeNotRegistered',
+    'PayeeReputationTooLow',
+    'AgentRevoked',
+    'PolicyExpired',
+    'InvalidVoucher',
+    'VoucherExceedsDeposit',
+    'ChannelNotOpen',
+    'ChannelExpired',
+    'InsufficientVaultBalance',
+    'InvalidCumulativeAmount',
+    'ChannelNotExpirableYet',
+    'OnlyOwner',
+    'OnlyPayee',
+    'ZeroAddress',
+    'OnlyPendingOwner',
+    'InvalidChannelExpiry',
+    'InvalidPolicyWindow',
+    'InvalidPolicyBudget',
+    'InvalidPolicyExpiry',
+    'ZeroAmount',
+  ];
+
+  let decodedFromHex: DecodedContractError | null = null;
+
   try {
     // Look for data field in RPC error, simulation error, or contract call error
-    const data =
-      error?.data ||
-      error?.error?.data ||
-      error?.cause?.data ||
-      error?.cause?.cause?.data ||
-      (typeof error?.message === 'string' && error.message.match(/0x[a-fA-F0-9]{8,}/)?.[0]);
+    const errorObj = error as any;
+    let data: any =
+      errorObj?.data ||
+      errorObj?.error?.data ||
+      errorObj?.cause?.data ||
+      errorObj?.cause?.cause?.data;
 
+    // Extract hex from message if not found
+    if (!data && typeof errorObj?.message === 'string') {
+      const match = errorObj.message.match(/0x[a-fA-F0-9]{8,}/);
+      if (match?.[0]) {
+        data = match[0];
+      }
+    }
+
+    // Only proceed if data is a string starting with 0x
     if (data && typeof data === 'string' && data.startsWith('0x')) {
       const decoded = decodeErrorResult({
-        abi: SpendGuardAbi as any,
+        abi: SpendGuardAbi as Abi,
         data: data as `0x${string}`,
       });
 
@@ -58,40 +95,61 @@ export function decodeSpendGuardError(error: any): DecodedContractError | null {
         case 'InsufficientVaultBalance':
           humanMessage = 'SpendGuard vault does not have enough unlocked USDC.';
           break;
+        case 'InvalidCumulativeAmount':
+          humanMessage = 'Invalid cumulative amount.';
+          break;
+        case 'ChannelNotExpirableYet':
+          humanMessage = 'Channel is not expirable yet.';
+          break;
+        case 'OnlyOwner':
+          humanMessage = 'Caller is not the owner.';
+          break;
+        case 'OnlyPayee':
+          humanMessage = 'Caller is not the payee.';
+          break;
+        case 'ZeroAddress':
+          humanMessage = 'Address cannot be zero.';
+          break;
+        case 'OnlyPendingOwner':
+          humanMessage = 'Caller is not the pending owner.';
+          break;
+        case 'InvalidChannelExpiry':
+          humanMessage = 'Invalid channel expiry.';
+          break;
+        case 'InvalidPolicyWindow':
+          humanMessage = 'Invalid policy window.';
+          break;
+        case 'InvalidPolicyBudget':
+          humanMessage = 'Invalid policy budget.';
+          break;
+        case 'InvalidPolicyExpiry':
+          humanMessage = 'Invalid policy expiry.';
+          break;
+        case 'ZeroAmount':
+          humanMessage = 'Amount cannot be zero.';
+          break;
       }
 
-      return {
+      decodedFromHex = {
         errorName: decoded.errorName,
         args: decoded.args,
         humanMessage,
       };
     }
   } catch (err) {
-    // If decoding failed, check if the error message string contains error names
-    const knownErrors = [
-      'OverChannelCap',
-      'WindowBudgetExceeded',
-      'PayeeNotRegistered',
-      'PayeeReputationTooLow',
-      'AgentRevoked',
-      'PolicyExpired',
-      'InvalidVoucher',
-      'VoucherExceedsDeposit',
-      'ChannelNotOpen',
-      'ChannelExpired',
-      'InsufficientVaultBalance',
-    ];
+    decodedFromHex = null;
+  }
 
-    const errStr = String(error?.message || error);
-    for (const name of knownErrors) {
-      if (errStr.includes(name)) {
-        return {
-          errorName: name,
-          humanMessage: `Policy rejection: ${name}`,
-        };
-      }
+  // Always scan for string-based error names if hex decoding failed or didn't find match
+  const errStr = String((error as any)?.message || (error as any)?.reason || error || '');
+  for (const name of knownErrors) {
+    if (errStr.includes(name)) {
+      return {
+        errorName: name,
+        humanMessage: `Policy rejection: ${name}`,
+      };
     }
   }
 
-  return null;
+  return decodedFromHex;
 }

@@ -45,11 +45,14 @@ export function hashVoucher(
 }
 
 export async function signVoucher(
-  account: { signTypedData: (params: any) => Promise<Hex> },
+  account: Account | { signTypedData: (params: any) => Promise<Hex> },
   voucher: VoucherData,
   verifyingContract: Address,
   chainId: number = monadTestnet.id
 ): Promise<Hex> {
+  if (!account.signTypedData) {
+    throw new Error('Account does not support signTypedData');
+  }
   return account.signTypedData({
     domain: getVoucherDomain(verifyingContract, chainId),
     types: VOUCHER_EIP712_TYPES,
@@ -58,7 +61,7 @@ export async function signVoucher(
       channelId: voucher.channelId,
       cumulativeAmount: voucher.cumulativeAmount,
     },
-  });
+  } as any);
 }
 
 export async function verifyVoucherSignature(params: {
