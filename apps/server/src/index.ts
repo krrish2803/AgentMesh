@@ -29,7 +29,14 @@ console.log('--- Starting AgentMesh Telemetry & Coordination Server ---');
 
 const app = new Hono();
 
-app.use('*', cors({ origin: CONFIG.DASHBOARD_ORIGIN, credentials: true }));
+// DASHBOARD_ORIGIN accepts a comma-separated list (e.g. "http://localhost:3000,https://app.example.com").
+// A lone "*" allows any origin (note: browsers reject "*" together with credentials).
+const DASHBOARD_ORIGINS = CONFIG.DASHBOARD_ORIGIN.split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+const CORS_ORIGIN = DASHBOARD_ORIGINS.includes('*') ? '*' : DASHBOARD_ORIGINS;
+
+app.use('*', cors({ origin: CORS_ORIGIN, credentials: true }));
 
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
 const EXPLORER_BASE = 'https://testnet.monadscan.com';
